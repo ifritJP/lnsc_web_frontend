@@ -1,0 +1,3 @@
+[submodule "oss/LuneScript"]
+	path = oss/LuneScript
+	url = https://github.com/ifritJP/LuneScript.git
