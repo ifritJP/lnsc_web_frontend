@@ -3,6 +3,11 @@
 */
  
 (async function() {
+    function Log() {
+        console.log( "lns-worker: ", ...arguments );
+    }
+    
+    
     // worker に "wasm_exec.js" を読み込む
     importScripts("../oss/go/wasm_exec.js");
     importScripts("../oss/jszip/dist/jszip.min.js");
@@ -25,12 +30,12 @@
                 this.consoleTxtList = [];
 
                 
-                console.log( message.data.kind );
+                Log( message.data.kind );
                 let resp = {};
-                if ( message.data.kind == "conv2lua_and_exec" ) {
-                    resp = this.conv2lua_and_exec( message.data );
+                if ( message.data.kind == "conv2lua" ) {
+                    resp = this.conv2lua( message.data );
                 } else {
-                    console.log( "not found kind -- ", message.data.kind );
+                    Log( "not found kind -- ", message.data.kind );
                 }
 
                 resp.no = message.data.no;
@@ -40,13 +45,18 @@
         }
         
         
-        conv2lua_and_exec( info ) {
+        conv2lua( info ) {
             let luaCode = this.lnscIF.lns2lua( info.lnsCode );
-            if ( luaCode ) {
-                return { luaCode: luaCode,
-                         execLog: this.lnscIF.exeLua( luaCode ) };
+            if ( !luaCode ) {
+                return { luaCode: "", execLog: "" };
             }
-            return { luaCode: "", execLog: "" };
+            let result = { luaCode: luaCode };
+            if ( !info.andExec ) {
+                return result;
+            } else {
+                result.execLog = this.lnscIF.exeLua( luaCode );
+                return result;
+            }
         }
     }
    
@@ -64,29 +74,43 @@
     }
 
     self.addEventListener( "message", (message) => {
-        messageList.push( message );
-        processMessage();
+        if ( message.data == "reloadLnsc" ) {
+            loadLnsc();
+            Log( "reloadLnsc" );
+        } else {
+            messageList.push( message );
+            processMessage();
+        }
     } );
-    
 
-    async function loadLnsc() {
+    async function loadWAsm() {
         // main.wasm をロードし、 WebAssembly で実行
         //let asmBin = await (await fetch('./lnsc.wasm')).arrayBuffer();
         
         let zipIF = new JSZip();
         let zipedBin = await (await fetch('./lnsc.zip')).arrayBuffer();
         let lnsc_wasm_zip = await zipIF.loadAsync(zipedBin);
-        let asmBin = await lnsc_wasm_zip.file( "for_wasm/lnsc.wasm" ).async( "uint8array" );
+        return await lnsc_wasm_zip.file( "for_wasm/lnsc.wasm" ).async( "uint8array" );
+    }
+
+    let asmBin = await loadWAsm();
+
+    async function loadLnsc() {
 
         const go = new Go(); // definition in wasm_exec.js
         let res = await WebAssembly.instantiate( asmBin, go.importObject);
-        
-        go.run(res.instance); // execute the go main method
+
+        // execute the go main method
+        go.run(res.instance).then( ()=> {
+            // main が終了した場合はメッセージを通知する
+            Log( "lnsc: detect exit" );
+            self.postMessage( { no:-1 } );
+        });
         // 実行すると __lnsc に初期化用関数がセットされる
-        return new Lnsc( __lnsc() );
+        lnsc = new Lnsc( __lnsc() );
     }
 
-    lnsc = await loadLnsc();
+    await loadLnsc();
     
 
     // 初期化完了を通知
