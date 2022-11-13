@@ -28,13 +28,21 @@ local lnsStreamObj = {
       lnsFront:lnsOStream( frontId, txt )
    end
 }
-io = {
+_ENV.io = {
    stdout = lnsStreamObj,
    stderr = lnsStreamObj,
    open = function()
       return nil
    end
 }
+
+-- lns のコンソール出力を lnsFront:lnsOStream に切り替え
+local util = require( 'lune.base.Util' )
+local function writer( txt )
+   lnsFront:lnsOStream( frontId, txt )
+end
+util.setConsoleOStreamWithWriter( writer, writer )
+
 
 -- 引数で与えられた lnsCode から Lua コードに変換する
 local front = require( 'lune.base.front' )

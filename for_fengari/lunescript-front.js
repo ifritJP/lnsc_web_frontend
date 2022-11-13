@@ -1,5 +1,3 @@
-
-
 var lnsFront = {
 };
 lnsFront.lnsOStream = null;
@@ -53,9 +51,10 @@ lnsFront.compile = function ( frontId, maxTime ) {
 	fengari.lua.lua_pushinteger( fengari.L, maxTime );
 	fengari.lua.lua_pushstring( fengari.L, fengari.to_luastring( editor.value ) );
     	if ( fengari.lua.lua_pcall( fengari.L, 3, 0, 0 ) != fengari.lua.LUA_OK ) {
-    	    lnsFront.luaOStream(
-                frontId,
-                fengari.to_jsstring( fengari.lua.lua_tostring( fengari.L, -1 ) ) + "\n" );
+            let result = fengari.lua.lua_tostring( fengari.L, -1 );
+            if ( result != null ) {
+    	        lnsFront.luaOStream( frontId, fengari.to_jsstring( result ) + "\n" );
+            }
 	}
         // hook を解除する
         fengari.lua.lua_sethook( fengari.L, null, 0, 0 );
