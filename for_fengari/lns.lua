@@ -53,7 +53,8 @@ option.useLuneModule = Option.getRuntimeModule()
 option.transCtrlInfo.validMultiPhaseTransUnit = false
 option.useIpairs = true
 
-local luaCode = front.convertLnsCode2LuaCodeWithOpt( option, lnsCode, "lnsweb.lns" )
+local frontObj = front.Front._new( option )
+local luaCode = frontObj.convertLnsCode2LuaCodeWithOpt( lnsCode, "lnsweb.lns" )
 
 lnsFront:setLuaCode( frontId, luaCode )
 
