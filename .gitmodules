@@ -7,3 +7,6 @@
 [submodule "oss/jszip"]
 	path = oss/jszip
 	url = https://github.com/Stuk/jszip.git
+[submodule "oss/ace"]
+	path = oss/ace
+	url = https://github.com/ajaxorg/ace-builds/

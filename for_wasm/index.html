@@ -17,46 +17,82 @@
       font-weight:bold;
       font-family: monospace, "DejaVu Sans Mono";
     }
-    </style>    
-  <body>
-    <script type="text/javascript" src="./lnsc_frontend.js"></script>
-    <script>
-    addEventListener("load", function( event ) {
-      document.__getLnsFrontEnd().then( (frontend) => {
-        let runDiv = document.getElementById( "run" );
-        let buttonRun = document.createElement( "input" );
-        buttonRun.type = "button";
-        buttonRun.value = "run";
+    #lns-code-editor { 
+      font-size:10pt;
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 50%;
+      left: 0;
+    }
+    #lns-other {
+      position: absolute;
+      top: 50%;
+      right: 0;
+      bottom: 0;
+      left: 0;
+    }
+    </style>
+    <body>
 
-        buttonRun.addEventListener( "click", async function( event ) {
-          let consoleEle = document.getElementById( "console" );
-          let luaCodeEle = document.getElementById( "lua-code" );
-          let lnsCodeEle = document.getElementById( "lns-code" );
-          
-          let result = await frontend.conv2lua( lnsCodeEle.value, true, 4 );
+      <script>
+      var require = { paths: { vs: '../oss/monaco/package/min/vs' } };
+      </script>
+      <script src="../oss/monaco/package/min/vs/loader.js"></script>
+      <script src="../oss/monaco/package/min/vs/editor/editor.main.nls.js"></script>
+      <script src="../oss/monaco/package/min/vs/editor/editor.main.js"></script>
 
+      <script type="text/javascript" src="./lnsc_frontend.js"></script>
+      
 
-          consoleEle.value = result.console + result.execLog + "---------\nend";
-          luaCodeEle.value = result.luaCode;
-        } );
+      <script type="module" type="text/javascript">
+      import * as Monaco from "../common/monaco.js";
+      
+        addEventListener("load", function( event ) {
 
-        runDiv.appendChild( buttonRun );
-      } );
-    } );
-    </script>
-    <div id="run">
-    </div>
-    <div spellcheck="false">
-      <textarea class="code" rows="15" id="lns-code">fn output( word:str ) {
-print( "__%s__\n＞  %s  ＜\n~~%s~~"
+        document.__getLnsFrontEnd().then( async function (frontend) {
+
+          let editor = Monaco.init( document.getElementById( "lns-code-editor" ),
+                                   frontend,
+                                   `fn output( word:str ) {
+print( "__%s__\\n＞  %s  ＜\\n~~%s~~"
        ( string.rep("人",#word/2+2), word,string.rep("∨∨",#word/2+2)));
 }
-output( "Hello World." );
-      </textarea> <br>
+// test
+output( "Hello World." );` );
+
+
+          
+          
+          let runDiv = document.getElementById( "run" );
+          let buttonRun = document.createElement( "input" );
+          buttonRun.type = "button";
+          buttonRun.value = "run";
+
+          buttonRun.addEventListener( "click", async function( event ) {
+            let consoleEle = document.getElementById( "console" );
+            let luaCodeEle = document.getElementById( "lua-code" );
+            
+            let result = await frontend.conv2lua( editor.getText(), true, 4 );
+
+            
+
+
+            consoleEle.value = result.console + result.execLog + "---------\nend";
+            luaCodeEle.value = result.luaCode;
+          } );
+
+          runDiv.appendChild( buttonRun );
+        } );
+      } );
+      </script>
+      <div id="lns-code-editor"></div>
+      <div id="lns-other" spellcheck="false">
+        <div id="run"></div>
       output <br>
-      <textarea readonly class="console" rows="5" id="console"></textarea> <br>
+        <textarea readonly class="console" rows="5" id="console"></textarea> <br>
       Lua code <br>
-      <textarea readonly class="code" rows="20" id="lua-code"></textarea><br>
-    </div>
-  </body>
+        <textarea readonly class="code" rows="20" id="lua-code"></textarea><br>
+      </div>
+    </body>
 </html>

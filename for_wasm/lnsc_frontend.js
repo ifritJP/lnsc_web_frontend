@@ -72,6 +72,7 @@
                 this.processNo = 1;
             }
             this.no2resolve.set( message.no, resolve );
+            console.log( "post",  message.no );
             this.worker.postMessage( message );
 
 
@@ -102,6 +103,26 @@
                            { kind:"conv2lua",
                              lnsCode: lnsCode,
                              andExec: andExec } );
+            } );
+        }
+
+        async getIndent( lnsCode, targetLineNo, endLineNo ) {
+            return new Promise( (resolve, reject) => {
+                this.post( resolve, 10,
+                           { kind:"getIndent",
+                             lnsCode: lnsCode,
+                             targetLineNo: targetLineNo,
+                             endLineNo: endLineNo } );
+            } );
+        }
+
+        async complete( lnsCode, lineNo, column ) {
+            return new Promise( (resolve, reject) => {
+                this.post( resolve, 10,
+                           { kind:"complete",
+                             lnsCode: lnsCode,
+                             lineNo: String( lineNo ),
+                             column: String( column ) } );
             } );
         }
     }
