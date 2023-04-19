@@ -15,8 +15,9 @@
     let lnsc = null;
     
     class Lnsc {
-        constructor( lnscIF ) {
+        constructor( lnscIF, runPromise ) {
             this.lnscIF = lnscIF;
+            this.runPromise = runPromise;
 
             // lnsc のコンソール出力を consoleTxtList に格納する
             this.consoleTxtList = [];
@@ -81,7 +82,14 @@
             // null でクリアしておく。
             lnsc = null;
             console.log( "complete end", result );
-            return { complete: JSON.parse( this.consoleTxtList.join( "" ) ) };
+
+            let completeObj;
+            try {
+                completeObj = JSON.parse( this.consoleTxtList.join( "" ) );
+            } catch ( e ) {
+                return { complete: {} };
+            }
+            return { complete: completeObj };
         }
     }
    
@@ -132,13 +140,15 @@
         let res = await WebAssembly.instantiate( asmBin, go.importObject);
         
         // execute the go main method
-        go.run(res.instance).then( ()=> {
+        let runPromise = go.run(res.instance);
+        
+        runPromise.then( ()=> {
             // main が終了した場合はメッセージを通知する
             Log( "lnsc: detect exit" );
             self.postMessage( { no:-1 } );
         });
         // 実行すると __lnsc に初期化用関数がセットされる
-        lnsc = new Lnsc( __lnsc() );
+        lnsc = new Lnsc( __lnsc(), runPromise );
         console.log( "loadLnsc end" );
     }
 

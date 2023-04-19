@@ -1,9 +1,12 @@
+const langID = 'LuneScript';
+const startCompleteLen = 2;
+
 function setupLanguage( frontend ) {
     monaco.languages.register({
-        id: 'LuneScript',
+        id: langID,
     });
 
-    monaco.languages.setMonarchTokensProvider( 'LuneScript', {
+    monaco.languages.setMonarchTokensProvider( langID, {
         keywords: [
 	    "self", "fn", "elseif", "else", "while", "repeat", "for",
 	    "apply", "of", "foreach", "forsort", "in", "return", "class", "false",
@@ -96,33 +99,70 @@ function setupLanguage( frontend ) {
     });
 
 
-    // Register new completionItemProvider on Monaco's language import
-    monaco.languages.registerCompletionItemProvider('LuneScript', {
+    // 処理中の補完 Promise。
+    // これが null 以外の場合、 await する。
+    let processingPromise = null;
+    monaco.languages.registerCompletionItemProvider(langID, {
         // "." で補完開始
         triggerCharacters: ["."],
         // 補完関数
-        provideCompletionItems: async function( model, position, context, token ) {
-            //console.log( position, context.triggerCharacter, model, token );
-            
-            let complete = await frontend.complete( "prlune\n", 1, 2 );
-            console.log( "console", complete.complete );
+        provideCompletionItems: async function( model, position, context ) {
+            //console.log( position, context.triggerCharacter, model );
 
-            const suggestions = [];
-            let range = {
-                startLineNumber: position.lineNumber,
-                startColumn: position.column,
-                endLineNumber: position.lineNumber,
-                endColumn: position.column + 1,
-            };
-            suggestions.push(
-                {
-                    label: "hoge",
-                    kind: monaco.languages.CompletionItemKind.Snippet,
-                    insertText: 'test',
-                    range: range,
-                    //command: { id: 'editor.action.insertLineAfter' }
-                });
-            return { suggestions: suggestions };
+            if ( processingPromise != null ) {
+                // 他の補完が処理中の場合、 incomplete で返す。
+                return { incomplete: true };
+            }
+            
+            if ( context.triggerKind == monaco.languages.CompletionTriggerKind.Invoke ) {
+                let info = model.__lnsDoc.getToken( position );
+                console.log( info[0], info[0].length );
+                if ( info[0].length < startCompleteLen ) {
+                    return null;
+                }
+            }
+            
+            let range = new monaco.Range( position.lineNumber, position.column,
+                                          position.lineNumber, position.column + 1 );
+
+            let complete;
+
+            let code = model.getValueInRange(
+                new monaco.Range(
+                    1, 0, 
+                    range.endLineNumber, range.endColumn ) );
+
+
+            processingPromise = frontend.complete(
+                    code + "lune", range.startLineNumber, range.startColumn );
+
+            let compResult = await processingPromise;
+            processingPromise = null;
+
+            console.log( "console", compResult.complete );
+
+            complete = compResult.complete.lunescript;
+            
+            if ( complete ) { 
+                let suggestions = complete.candidateList.map(
+                    (X) => {
+                        let candidate = X.candidate;
+                        let targetRange = new monaco.Range(
+                            range.startLineNumber,
+                            range.startColumn - complete.prefix.length,
+                            range.startLineNumber,
+                            range.startColumn );
+                        return {
+                            label: candidate.displayTxt,
+                            kind: monaco.languages.CompletionItemKind.Snippet,
+                            insertText: candidate.displayTxt,
+                            range: targetRange,
+                            //command: { id: 'editor.action.insertLineAfter' }
+                        };
+                    });
+                return { suggestions: suggestions };
+            }
+            return null;
         },
     });
 }
@@ -130,6 +170,7 @@ function setupLanguage( frontend ) {
 class Doc {
     constructor( model ) {
         this.model = model;
+        model.__lnsDoc = this;
 
         this.reAnyChar = /\S/;
     }
@@ -157,17 +198,32 @@ class Doc {
             ] );
         }
     }
+
+    getToken( position ) {
+        let line = this.model.getLineContent( position.lineNumber );
+        let result = this.model.findPreviousMatch(
+            "\\W", position, true, true, null, false );
+        let tokenRange = new monaco.Range(
+            result.range.endLineNumber, result.range.endColumn,
+            position.lineNumber, position.column );
+        return [ this.model.getValueInRange( tokenRange ), tokenRange ];
+    }
 }
 
 class Editor {
     constructor( element, frontend, lnsCode ) {
         this.frontend = frontend;
         let monacoEditor = monaco.editor.create( element, {
+            // デフォルトの補完を動かすと、 lnsc の補完が正常に動かないので抑制
+            wordBasedSuggestions:false,
+            // acceptSuggestionOnCommitCharacter: false,
+            // quickSuggestions: false,
+            // suggest: false,
             autoClosingBrackets: false,
             autoIndent: "none",
 	    theme: "vs-dark",
             // "vs" | "vs-dark" | "hc-black" | "hc-light"
-            language: 'LuneScript',
+            language: langID,
             //language: 'javascript',
 	    value: lnsCode,
         });
@@ -184,12 +240,12 @@ class Editor {
                 e.stopPropagation();
                 // タブキーが押されたときの処理
                 editor.updateIndent( monacoEditor.getSelection() );
-            } else if ( e.keyCode === monaco.KeyCode.Enter ) {
-                // Enter
-                let selection = monacoEditor.getSelection();
-                editor.updateIndent( selection );
-            } else if ( e.keyCode == monaco.KeyCode.KeyJ && e.ctrlKey ) {
-                // C-j
+            } else if ( e.keyCode === monaco.KeyCode.Enter ||
+                        e.keyCode == monaco.KeyCode.KeyJ && e.ctrlKey ||
+                        e.keyCode === monaco.KeyCode.BracketLeft ||
+                        e.keyCode === monaco.KeyCode.BracketRight )
+            {
+                // Enter, C-j, {, }
                 let selection = monacoEditor.getSelection();
                 editor.updateIndent( selection );
             }
@@ -205,6 +261,14 @@ class Editor {
     }
 
     setKeyBind( monacoEditor ) {
+
+        // Enter キーのアクションがなさそうなので、
+        // MyEnter として \n のトリガーを登録する。
+        monaco.editor.addCommand(
+            { id: "MyEnter", run: () => {
+                monacoEditor.trigger('keyboard', 'type', { text: '\n' });
+            } } );
+        
         monaco.editor.addKeybindingRules( [
             {
                 // C-f
@@ -231,7 +295,7 @@ class Editor {
             {
                 // C-j
                 keybinding: monaco.KeyCode.KeyJ | monaco.KeyMod.CtrlCmd,
-                command: "editor.action.insertLineAfter"
+                command: "MyEnter"
             },
             {
                 // C-d
