@@ -125,6 +125,14 @@
                              column: String( column ) } );
             } );
         }
+
+        async diag( lnsCode ) {
+            return new Promise( (resolve, reject) => {
+                this.post( resolve, 10,
+                           { kind:"diag",
+                             lnsCode: lnsCode } );
+            } );
+        }
     }
     let frontEnd = null;
     document.__getLnsFrontEnd = async () => {

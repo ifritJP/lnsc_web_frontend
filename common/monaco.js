@@ -111,11 +111,11 @@ function setupLanguage( frontend ) {
 
             if ( processingPromise != null ) {
                 // 他の補完が処理中の場合、 incomplete で返す。
-                return { incomplete: true };
+                return { incomplete: true, suggestions:[] };
             }
             
             if ( context.triggerKind == monaco.languages.CompletionTriggerKind.Invoke ) {
-                let info = model.__lnsDoc.getToken( position );
+                let info = model.__lnsDoc.getBeforeToken( position );
                 console.log( info[0], info[0].length );
                 if ( info[0].length < startCompleteLen ) {
                     return null;
@@ -139,7 +139,7 @@ function setupLanguage( frontend ) {
             let compResult = await processingPromise;
             processingPromise = null;
 
-            console.log( "console", compResult.complete );
+            console.log( "console", compResult.complete, compResult.console );
 
             complete = compResult.complete.lunescript;
             
@@ -199,13 +199,38 @@ class Doc {
         }
     }
 
-    getToken( position ) {
+    getBeforeToken( position ) {
         let line = this.model.getLineContent( position.lineNumber );
         let result = this.model.findPreviousMatch(
             "\\W", position, true, true, null, false );
         let tokenRange = new monaco.Range(
             result.range.endLineNumber, result.range.endColumn,
             position.lineNumber, position.column );
+        return [ this.model.getValueInRange( tokenRange ), tokenRange ];
+    }
+
+    getToken( position ) {
+        let range = new monaco.Range(
+            position.lineNumber, position.column,
+            position.lineNumber, position.column + 1 );
+        let curChar = this.model.getValueInRange( range );
+
+        let tokenRange;
+        if ( /\w/.test( curChar ) ) {
+            let start = this.model.findPreviousMatch(
+                "\\W", position, true, true, null, false );
+            let end = this.model.findNextMatch(
+                "\\W", position, true, true, null, false );
+            let endColumn = end.range.startColumn;
+            if ( end.range.startLineNumber < position.lineNumber ) {
+                endColumn = this.model.getLineMaxColumn( position.lineNumber );
+            }
+            tokenRange = new monaco.Range(
+                position.lineNumber, start.range.endColumn,
+                position.lineNumber, endColumn );
+        } else {
+            tokenRange = range;
+        }
         return [ this.model.getValueInRange( tokenRange ), tokenRange ];
     }
 }
@@ -229,39 +254,67 @@ class Editor {
         });
         this.monacoEditor = monacoEditor;
         this.doc = new Doc( monacoEditor.getModel() );
+        this.modCount = 0;
+        this.diagCheckCount = 0;
+        
+        
 
         this.setKeyBind( monacoEditor );
+        this.setChangeHook();
 
-
-        let editor = this;
-        this.monacoEditor.onKeyUp( async function (e) {
-            if (e.keyCode === monaco.KeyCode.Tab) {
-                e.preventDefault();
-                e.stopPropagation();
-                // タブキーが押されたときの処理
-                editor.updateIndent( monacoEditor.getSelection() );
-            } else if ( e.keyCode === monaco.KeyCode.Enter ||
-                        e.keyCode == monaco.KeyCode.KeyJ && e.ctrlKey ||
-                        e.keyCode === monaco.KeyCode.BracketLeft ||
-                        e.keyCode === monaco.KeyCode.BracketRight )
-            {
-                // Enter, C-j, {, }
-                let selection = monacoEditor.getSelection();
-                editor.updateIndent( selection );
-            }
-        });
-        this.monacoEditor.onKeyDown( function (e) {
-            if (e.keyCode === monaco.KeyCode.Tab) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-        });
 
         this.updateIndent( this.monacoEditor.getModel().getFullModelRange() );
     }
 
-    setKeyBind( monacoEditor ) {
+    setChangeHook() {
+        let editor = this;
+        this.monacoEditor.onDidChangeModelContent( function(event) {
+            editor.modCount++;
+        });
 
+        setInterval( async function() {
+            if ( editor.diagCheckCount != editor.modCount ) {
+                editor.diagCheckCount = editor.modCount;
+                
+                let code = editor.monacoEditor.getModel().getValue();
+                let info = await editor.frontend.diag( code );
+                let lineList = info.console.split( '\n' );
+                let pattern = /([\w\.]+):(\d+):(\d+):(.+)/g;
+                let diagList = lineList.
+                    map( (X) => [ ...X.matchAll( pattern ) ] ).
+                    filter( (X) => X.length != 0 && X[0][ 4 ] != " error: EOF" );
+
+                monaco.editor.removeAllMarkers("lnsc-diag");
+                
+                let markerList = diagList.map( function(X) {
+                    let info = X[0];
+                    console.log( info );
+                    let lineNo = Number( info[ 2 ] );
+                    let column = Number( info[ 3 ] );
+                    let message = info[ 4 ];
+                    let tokenInfo = editor.doc.getToken( {
+                        lineNumber: lineNo, column: column } );
+                    console.log( "token ", tokenInfo );
+                    let range = tokenInfo[ 1 ];
+                    return {
+                        startLineNumber: range.startLineNumber,
+                        startColumn: range.startColumn,
+                        endLineNumber: range.endLineNumber,
+                        endColumn: range.endColumn,
+                        message: message,
+                        severity: monaco.MarkerSeverity.Error,
+                    };
+                } );
+                console.log( markerList );
+                if ( markerList.length != 0 ) {
+                    monaco.editor.setModelMarkers(
+                        editor.monacoEditor.getModel(), "lnsc-diag", markerList );
+                }
+            }
+        }, 1000 * 3 );
+    }
+
+    setKeyBind( monacoEditor ) {
         // Enter キーのアクションがなさそうなので、
         // MyEnter として \n のトリガーを登録する。
         monaco.editor.addCommand(
@@ -315,6 +368,31 @@ class Editor {
             
             
         ]);
+
+
+        let editor = this;
+        this.monacoEditor.onKeyUp( async function (e) {
+            if (e.keyCode === monaco.KeyCode.Tab) {
+                e.preventDefault();
+                e.stopPropagation();
+                // タブキーが押されたときの処理
+                editor.updateIndent( monacoEditor.getSelection() );
+            } else if ( e.keyCode === monaco.KeyCode.Enter ||
+                        e.keyCode == monaco.KeyCode.KeyJ && e.ctrlKey ||
+                        e.keyCode === monaco.KeyCode.BracketLeft ||
+                        e.keyCode === monaco.KeyCode.BracketRight )
+            {
+                // Enter, C-j, {, }
+                let selection = monacoEditor.getSelection();
+                editor.updateIndent( selection );
+            }
+        });
+        this.monacoEditor.onKeyDown( function (e) {
+            if (e.keyCode === monaco.KeyCode.Tab) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
     }
 
     async updateIndent( selection ) {

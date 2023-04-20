@@ -40,6 +40,8 @@
                 resp = this.getIndent( message.data );
             } else if ( message.data.kind == "complete" ) {
                 resp = this.complete( message.data );
+            } else if ( message.data.kind == "diag" ) {
+                resp = this.diag( message.data );
             } else {
                 Log( "not found kind -- ", message.data.kind );
             }
@@ -74,11 +76,15 @@
 
         complete( info ) {
             console.log( "complete" );
+
             
-            let result = this.lnscIF.complete(
-                info.lnsCode, "code.lns", "comp", "code", info.lineNo, info.column );
+            let result = this.lnscIF.runLnsc(
+                [
+                    [ "code.lns", info.lnsCode ]
+                ],
+                "code.lns", "comp", "code", info.lineNo, info.column );
             
-            // 現状 complete を実行すると lnsc が落ちるので
+            // 現状 runLnsc を実行すると lnsc が落ちるので
             // null でクリアしておく。
             lnsc = null;
             console.log( "complete end", result );
@@ -87,9 +93,26 @@
             try {
                 completeObj = JSON.parse( this.consoleTxtList.join( "" ) );
             } catch ( e ) {
-                return { complete: {} };
+                return { complete: {}, console: this.consoleTxtList };
             }
             return { complete: completeObj };
+        }
+
+        diag( info ) {
+            console.log( "diag" );
+            
+            let result = this.lnscIF.runLnsc(
+                [
+                    [ "code.lns", info.lnsCode ]
+                ],
+                "code.lns", "diag" );
+            
+            // 現状 runLnsc を実行すると lnsc が落ちるので
+            // null でクリアしておく。
+            lnsc = null;
+            console.log( "diag end", result );
+
+            return { console: this.consoleTxtList };
         }
     }
    
