@@ -38,6 +38,8 @@
                 resp = this.conv2lua( message.data );
             } else if ( message.data.kind == "getIndent" ) {
                 resp = this.getIndent( message.data );
+            } else if ( message.data.kind == "runLnsc" ) {
+                resp = this.runLnsc( message.data );
             } else if ( message.data.kind == "complete" ) {
                 resp = this.complete( message.data );
             } else if ( message.data.kind == "diag" ) {
@@ -74,45 +76,51 @@
             return { indent: JSON.parse( indentTxt ).indent };
         }
 
-        complete( info ) {
-            console.log( "complete" );
-
-            
+        runLnsc( info ) {
+            console.log( "runLnsc worker", info.args );
             let result = this.lnscIF.runLnsc(
-                [
-                    [ "code.lns", info.lnsCode ]
-                ],
-                "code.lns", "comp", "code", info.lineNo, info.column );
+                Object.entries( info.name2code ), ...info.args );
             
-            // 現状 runLnsc を実行すると lnsc が落ちるので
-            // null でクリアしておく。
-            lnsc = null;
-            console.log( "complete end", result );
+            console.log( "runLnsc end", result );
 
+            if ( !result ) {
+                // lnsc が落ちたので、null でクリアしておく。
+                lnsc = null;
+            }
+
+            return { result: result, console:this.consoleTxtList.join( "" ) };
+        }
+        
+        cloneAndAdd( name2code, name, code ) {
+            let newName2code = Object.fromEntries( Object.entries( name2code ) );
+            newName2code[ name ] = code;
+            return newName2code;
+        }
+
+        path2mod( path ) {
+            return path.replace( /\.lns$/, "" ).replace( /\//, "." );
+        }
+        
+        complete( info ) {
+            let name = "_.lns";
+            let result = this.runLnsc(
+                { name2code: this.cloneAndAdd( info.name2code, name, info.lnsCode ),
+                  args: [ name, "comp", this.path2mod( name ),
+                          info.lineNo, info.column ] } );
             let completeObj;
             try {
-                completeObj = JSON.parse( this.consoleTxtList.join( "" ) );
+                completeObj = JSON.parse( result.console );
             } catch ( e ) {
-                return { complete: {}, console: this.consoleTxtList };
+                return { complete: {}, console: result.console };
             }
             return { complete: completeObj };
         }
 
         diag( info ) {
-            console.log( "diag" );
-            
-            let result = this.lnscIF.runLnsc(
-                [
-                    [ "code.lns", info.lnsCode ]
-                ],
-                "code.lns", "diag" );
-            
-            // 現状 runLnsc を実行すると lnsc が落ちるので
-            // null でクリアしておく。
-            lnsc = null;
-            console.log( "diag end", result );
-
-            return { console: this.consoleTxtList };
+            let name = "_.lns";
+            return this.runLnsc(
+                { name2code: this.cloneAndAdd( info.name2code, name, info.lnsCode ),
+                  args: [ name, "diag" ] } );
         }
     }
    

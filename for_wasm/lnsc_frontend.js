@@ -116,21 +116,31 @@
             } );
         }
 
-        async complete( lnsCode, lineNo, column ) {
+        async complete( lnsCode, name2code, lineNo, column ) {
             return new Promise( (resolve, reject) => {
                 this.post( resolve, 10,
                            { kind:"complete",
                              lnsCode: lnsCode,
+                             name2code: name2code,
                              lineNo: String( lineNo ),
                              column: String( column ) } );
             } );
         }
 
-        async diag( lnsCode ) {
+        async diag( lnsCode, name2code ) {
             return new Promise( (resolve, reject) => {
                 this.post( resolve, 10,
                            { kind:"diag",
-                             lnsCode: lnsCode } );
+                             lnsCode: lnsCode,
+                             name2code: name2code } );
+            } );
+        }
+        async runLnsc( name2code, args ) {
+            return new Promise( (resolve, reject) => {
+                this.post( resolve, 10,
+                           { kind:"runLnsc",
+                             name2code: name2code,
+                             args: args } );
             } );
         }
     }

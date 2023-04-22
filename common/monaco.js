@@ -134,7 +134,7 @@ function setupLanguage( frontend ) {
 
 
             processingPromise = frontend.complete(
-                    code + "lune", range.startLineNumber, range.startColumn );
+                code + "lune", {}, range.startLineNumber, range.startColumn );
 
             let compResult = await processingPromise;
             processingPromise = null;
@@ -267,17 +267,16 @@ class Editor {
     }
 
     setChangeHook() {
-        let editor = this;
-        this.monacoEditor.onDidChangeModelContent( function(event) {
-            editor.modCount++;
+        this.monacoEditor.onDidChangeModelContent( (event) => {
+            this.modCount++;
         });
 
-        setInterval( async function() {
-            if ( editor.diagCheckCount != editor.modCount ) {
-                editor.diagCheckCount = editor.modCount;
+        setInterval( async () => {
+            if ( this.diagCheckCount != this.modCount ) {
+                this.diagCheckCount = this.modCount;
                 
-                let code = editor.monacoEditor.getModel().getValue();
-                let info = await editor.frontend.diag( code );
+                let code = this.monacoEditor.getModel().getValue();
+                let info = await this.frontend.diag( code, {} );
                 let lineList = info.console.split( '\n' );
                 let pattern = /([\w\.]+):(\d+):(\d+):(.+)/g;
                 let diagList = lineList.
@@ -286,13 +285,13 @@ class Editor {
 
                 monaco.editor.removeAllMarkers("lnsc-diag");
                 
-                let markerList = diagList.map( function(X) {
+                let markerList = diagList.map( (X) => {
                     let info = X[0];
                     console.log( info );
                     let lineNo = Number( info[ 2 ] );
                     let column = Number( info[ 3 ] );
                     let message = info[ 4 ];
-                    let tokenInfo = editor.doc.getToken( {
+                    let tokenInfo = this.doc.getToken( {
                         lineNumber: lineNo, column: column } );
                     console.log( "token ", tokenInfo );
                     let range = tokenInfo[ 1 ];
@@ -308,10 +307,10 @@ class Editor {
                 console.log( markerList );
                 if ( markerList.length != 0 ) {
                     monaco.editor.setModelMarkers(
-                        editor.monacoEditor.getModel(), "lnsc-diag", markerList );
+                        this.monacoEditor.getModel(), "lnsc-diag", markerList );
                 }
             }
-        }, 1000 * 3 );
+        }, 1000 * 2 );
     }
 
     setKeyBind( monacoEditor ) {
@@ -370,13 +369,12 @@ class Editor {
         ]);
 
 
-        let editor = this;
-        this.monacoEditor.onKeyUp( async function (e) {
+        this.monacoEditor.onKeyUp( async (e) => {
             if (e.keyCode === monaco.KeyCode.Tab) {
                 e.preventDefault();
                 e.stopPropagation();
                 // タブキーが押されたときの処理
-                editor.updateIndent( monacoEditor.getSelection() );
+                this.updateIndent( monacoEditor.getSelection() );
             } else if ( e.keyCode === monaco.KeyCode.Enter ||
                         e.keyCode == monaco.KeyCode.KeyJ && e.ctrlKey ||
                         e.keyCode === monaco.KeyCode.BracketLeft ||
@@ -384,10 +382,10 @@ class Editor {
             {
                 // Enter, C-j, {, }
                 let selection = monacoEditor.getSelection();
-                editor.updateIndent( selection );
+                this.updateIndent( selection );
             }
         });
-        this.monacoEditor.onKeyDown( function (e) {
+        this.monacoEditor.onKeyDown( (e) => {
             if (e.keyCode === monaco.KeyCode.Tab) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -423,7 +421,15 @@ class Editor {
 
 export function init( element, frontend, lnsCode ) {
     setupLanguage( frontend );
-    
+
     let editor = new Editor( element, frontend, lnsCode );
+
+    // frontend.runLnsc(
+    //     { "_.lns" : "import sub; print( sub.hoge );",
+    //       "sub.lns" : "pub let hoge = 1;" },
+    //     [ "_.lns", "diag" ] ).
+    //     then( ( result ) => console.log( result ) );
+    
+    
     return editor;
 }

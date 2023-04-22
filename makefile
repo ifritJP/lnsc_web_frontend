@@ -1,5 +1,10 @@
 LNS_DIR=oss/LuneScript
 
+ifneq "$(wildcard Makefile.local)" ""
+include Makefile.local
+endif
+
+
 help:
 	@echo make help
 	@echo make build
