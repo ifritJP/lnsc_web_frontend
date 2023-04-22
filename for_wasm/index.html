@@ -42,7 +42,7 @@
       <script src="../oss/monaco/package/min/vs/editor/editor.main.nls.js"></script>
       <script src="../oss/monaco/package/min/vs/editor/editor.main.js"></script>
 
-      <script type="text/javascript" src="./lnsc_frontend.js"></script>
+      <script type="text/javascript" src="./lnsc_frontend.js?symbol=getLnsFrontEnd"></script>
       
 
       <script type="module" type="text/javascript">
@@ -50,7 +50,7 @@
       
         addEventListener("load", function( event ) {
 
-        document.__getLnsFrontEnd().then( async function (frontend) {
+        document.getLnsFrontEnd().then( async function (frontend) {
 
           let editor = Monaco.init( document.getElementById( "lns-code-editor" ),
                                    frontend,
@@ -73,10 +73,7 @@ output( "Hello World." );` );
             let consoleEle = document.getElementById( "console" );
             let luaCodeEle = document.getElementById( "lua-code" );
             
-            let result = await frontend.conv2lua( editor.getText(), true, 4 );
-
-            
-
+            let result = await frontend.conv2lua( editor.getText(), {}, true, 4 );
 
             consoleEle.value = result.console + result.execLog + "---------\nend";
             luaCodeEle.value = result.luaCode;

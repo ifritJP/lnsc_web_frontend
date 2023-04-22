@@ -6,11 +6,11 @@
     function Log() {
         console.log( "lns-worker: ", ...arguments );
     }
-    
+    const parentUrl = self.location.href.replace(/\/[^/]+$/, '/' );
     
     // worker に "wasm_exec.js" を読み込む
-    importScripts("../oss/go/wasm_exec.js");
-    importScripts("../oss/jszip/dist/jszip.min.js");
+    importScripts( parentUrl + "../oss/go/wasm_exec.js");
+    importScripts( parentUrl + "../oss/jszip/dist/jszip.min.js");
 
     let lnsc = null;
     
@@ -57,7 +57,9 @@
         
         
         conv2lua( info ) {
-            let luaCode = this.lnscIF.lns2lua( info.lnsCode );
+            console.log( Object.entries( info.name2code ) );
+            let luaCode = this.lnscIF.lns2lua(
+                info.lnsCode, Object.entries( info.name2code ) );
             if ( !luaCode ) {
                 return { luaCode: "", execLog: "" };
             }
@@ -154,7 +156,7 @@
         //let asmBin = await (await fetch('./lnsc.wasm')).arrayBuffer();
         
         let zipIF = new JSZip();
-        let zipedBin = await (await fetch('./lnsc.zip')).arrayBuffer();
+        let zipedBin = await (await fetch( parentUrl + 'lnsc.zip')).arrayBuffer();
         let lnsc_wasm_zip = await zipIF.loadAsync(zipedBin);
         return await lnsc_wasm_zip.file( "for_wasm/lnsc.wasm" ).async( "uint8array" );
     }

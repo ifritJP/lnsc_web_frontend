@@ -1,11 +1,24 @@
+"use strict";
+
 /**
    lnsc を制御する frontend。
    実際の lnsc は lnsc_frontendWorker.js で動かす。
  */
 (function() {
+    let thisUrl;
+    if ( document.currentScript ) {
+        thisUrl = document.currentScript.src;
+    // } else {
+    //     thisUrl = import.meta.url;
+    }
+
     function Log() {
         console.log( "lns-front: ", ...arguments );
     }
+    
+    const workerUrl = thisUrl.replace(/\/[^/]+$/, '/' ) + "lnsc_frontendWorker.js";
+    Log( "workerUrl", workerUrl );
+
     
     class Frontend {
         constructor( worker,  initResolve ) {
@@ -58,7 +71,7 @@
 
             // 再起動
             new Promise( (resolve, reject) => {
-                this.worker = new Worker('lnsc_frontendWorker.js');
+                this.worker = new Worker( workerUrl );
                 this.initWorker( resolve );
             } );
         }
@@ -90,6 +103,8 @@
            lnsCode を lua に変換する
 
            @param lnsCode Lns コード
+           @param name2code パス名 → Lns コードの Object。
+                    lnsCode からインポートしている別のモジュールの情報を登録する。
            @param andExec 変換後の Lua コードを実行する場合 true
            @param timeoutSec 処理のタイムアウト時間(秒)
            @return Promise 以下を保持する Object
@@ -97,11 +112,12 @@
               - execLog Lua を実行した時の出力結果
               - console 変換時のコンソールログ
         */
-        async conv2lua( lnsCode, andExec, timeoutSec ) {
+        async conv2lua( lnsCode, name2code, andExec, timeoutSec ) {
             return new Promise( (resolve, reject) => {
                 this.post( resolve, timeoutSec,
                            { kind:"conv2lua",
                              lnsCode: lnsCode,
+                             name2code: name2code || {},
                              andExec: andExec } );
             } );
         }
@@ -145,12 +161,13 @@
         }
     }
     let frontEnd = null;
-    document.__getLnsFrontEnd = async () => {
+    let symbol = new URL( thisUrl ).searchParams.get( 'symbol' ) || "getLnsFrontEnd";
+    document[ symbol ] = async () => {
         if ( frontEnd ) {
             return frontEnd;
         }
         return new Promise( (resolve, reject) => {
-            let worker = new Worker('lnsc_frontendWorker.js');
+            let worker = new Worker( workerUrl );
             frontEnd = new Frontend( worker, resolve );
         } );
     };
