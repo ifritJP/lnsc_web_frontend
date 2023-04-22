@@ -204,7 +204,7 @@ class Doc {
         let result = this.model.findPreviousMatch(
             "\\W", position, true, true, null, false );
         let tokenRange = new monaco.Range(
-            result.range.endLineNumber, result.range.endColumn,
+            position.lineNumber, result && result.range.endColumn || 0,
             position.lineNumber, position.column );
         return [ this.model.getValueInRange( tokenRange ), tokenRange ];
     }
@@ -221,12 +221,15 @@ class Doc {
                 "\\W", position, true, true, null, false );
             let end = this.model.findNextMatch(
                 "\\W", position, true, true, null, false );
-            let endColumn = end.range.startColumn;
-            if ( end.range.startLineNumber < position.lineNumber ) {
+            let startColumn = start && start.range.endColumn || 0;
+            let endColumn;
+            if ( !end || end.range.startLineNumber < position.lineNumber ) {
                 endColumn = this.model.getLineMaxColumn( position.lineNumber );
+            } else {
+                endColumn = end.range.startColumn;
             }
             tokenRange = new monaco.Range(
-                position.lineNumber, start.range.endColumn,
+                position.lineNumber, startColumn,
                 position.lineNumber, endColumn );
         } else {
             tokenRange = range;
