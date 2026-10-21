@@ -1,0 +1,175 @@
+"use strict";
+
+/**
+   lnsc を制御する frontend (direct wasm 版)。
+   実際の lnsc は lnsc_frontendWorker.js で動かす。
+   go-wasm 版 (../for_wasm/lnsc_frontend.js) と同じ API。
+ */
+(function() {
+    let thisUrl;
+    if ( document.currentScript ) {
+        thisUrl = document.currentScript.src;
+    // } else {
+    //     thisUrl = import.meta.url;
+    }
+
+    function Log() {
+        console.log( "lns-front: ", ...arguments );
+    }
+    
+    const workerUrl = thisUrl.replace(/\/[^/]+$/, '/' ) + "lnsc_frontendWorker.js";
+    Log( "workerUrl", workerUrl );
+
+    
+    class Frontend {
+        constructor( worker,  initResolve ) {
+            // lnsc を実行する worker
+            this.worker = worker;
+
+            // worker への依頼番号。 0 は初期セットアップ用
+            this.processNo = 1;
+            // processNo → resolve のマップ
+            this.no2resolve = new Map();
+
+            this.initWorker( initResolve );
+        }
+
+        // worker を初期化
+        initWorker( initResolve ) {
+            this.no2resolve.set( 0, initResolve );
+
+            this.worker.addEventListener( "message", (message) => {
+                let data = message.data;
+
+                if ( data.no == -1 ) {
+                    this.worker.postMessage( "reloadLnsc" );
+                } else {                 
+                    let resolve = this.no2resolve.get( data.no );
+                    if ( resolve ) {
+                        this.no2resolve.delete( data.no );
+                        if ( data.no == 0 ) {
+                            resolve( this );
+                            Log( "init" );
+                        } else {
+                            resolve( data );
+                        }
+                    }
+                }
+            });
+        }
+
+        // worker を kill して再起動
+        killAndClear() {
+            this.worker.terminate();
+
+            // 要求済みの resolve を全て解決する
+            for ( let items of this.no2resolve.entries() ) {
+                let messageNo = items[ 0 ];
+                let resolve = items[ 1 ];
+                resolve( { no: messageNo } );
+            }
+            this.no2resolve.clear();
+
+            // 再起動
+            new Promise( (resolve, reject) => {
+                this.worker = new Worker( workerUrl );
+                this.initWorker( resolve );
+            } );
+        }
+
+        // メッセージを worker に post する。
+        // worker から結果が戻ってきたら resolve にセットする。
+        post( resolve, timeoutSec, message ) {
+            message.no = this.processNo;
+            this.processNo++;
+            if ( this.processNo > 100 ) {
+                this.processNo = 1;
+            }
+            this.no2resolve.set( message.no, resolve );
+            console.log( "post",  message.no );
+            this.worker.postMessage( message );
+
+
+            let messageNo = message.no;
+            // worker 暴走防止のため timeoutSec 秒後に kill タイマーを設定
+            setTimeout(() => {
+                if ( this.no2resolve.get( messageNo ) ) {
+                    // 処理中の要求が残っている場合は暴走として kill する
+                    this.killAndClear();
+                }
+            } , timeoutSec * 1000 );
+        }
+
+        /**
+           lnsCode を lua に変換する
+
+           @param lnsCode Lns コード
+           @param name2code パス名 → Lns コードの Object。
+                    lnsCode からインポートしている別のモジュールの情報を登録する。
+           @param andExec 変換後の Lua コードを実行する場合 true
+           @param timeoutSec 処理のタイムアウト時間(秒)
+           @return Promise 以下を保持する Object
+              - luaCode 変換後の Lua コード
+              - execLog Lua を実行した時の出力結果
+              - console 変換時のコンソールログ
+        */
+        async conv2lua( lnsCode, name2code, andExec, timeoutSec ) {
+            return new Promise( (resolve, reject) => {
+                this.post( resolve, timeoutSec,
+                           { kind:"conv2lua",
+                             lnsCode: lnsCode,
+                             name2code: name2code || {},
+                             andExec: andExec } );
+            } );
+        }
+
+        async getIndent( lnsCode, targetLineNo, endLineNo ) {
+            return new Promise( (resolve, reject) => {
+                this.post( resolve, 10,
+                           { kind:"getIndent",
+                             lnsCode: lnsCode,
+                             targetLineNo: targetLineNo,
+                             endLineNo: endLineNo } );
+            } );
+        }
+
+        async complete( lnsCode, name2code, lineNo, column ) {
+            return new Promise( (resolve, reject) => {
+                this.post( resolve, 10,
+                           { kind:"complete",
+                             lnsCode: lnsCode,
+                             name2code: name2code,
+                             lineNo: String( lineNo ),
+                             column: String( column ) } );
+            } );
+        }
+
+        async diag( lnsCode, name2code ) {
+            return new Promise( (resolve, reject) => {
+                this.post( resolve, 10,
+                           { kind:"diag",
+                             lnsCode: lnsCode,
+                             name2code: name2code } );
+            } );
+        }
+        async runLnsc( name2code, args ) {
+            return new Promise( (resolve, reject) => {
+                this.post( resolve, 10,
+                           { kind:"runLnsc",
+                             name2code: name2code,
+                             args: args } );
+            } );
+        }
+    }
+    let frontEnd = null;
+    let symbol = new URL( thisUrl ).searchParams.get( 'symbol' ) || "getLnsFrontEnd";
+    document[ symbol ] = async () => {
+        if ( frontEnd ) {
+            return frontEnd;
+        }
+        return new Promise( (resolve, reject) => {
+            let worker = new Worker( workerUrl );
+            frontEnd = new Frontend( worker, resolve );
+        } );
+    };
+})();

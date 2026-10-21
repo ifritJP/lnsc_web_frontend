@@ -1,0 +1,24 @@
+// -*- coding: utf-8 -*-
+
+/*
+インデントの計算 (go-wasm 版の lnsc_main_wasm.go の getIndent と同じ処理) を行うコマンド。
+LuneScript の tools/formatter と一緒に wasm に変換する (../makefile の build-direct-wasm)。
+
+usage: indent path targetLineNo endLineNo
+
+path のコードの targetLineNo 〜 endLineNo 行のインデントを、JSON で標準出力に出力する。
+*/
+
+import lns.main;
+
+pub fn __main( argList:&List<str> ) : int {
+   let! mut file = io.open( argList[ 2 ] ## ) {
+      return 1;
+   };
+   let code = unwrap file.read( "*a" ) default "";
+   file.close();
+   let targetLineNo = unwrap tonumber( argList[ 3 ] ## ) default 1;
+   let endLineNo = unwrap tonumber( argList[ 4 ] ## ) default 1;
+   print( main.getIndentWithCode( code, targetLineNo@@int, endLineNo@@int ) );
+   return 0;
+}
